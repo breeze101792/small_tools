@@ -14,17 +14,17 @@ import re
 address_list = []
 mailServer = {'host': '', 'port': 0}
 userInfo = {'username': '', 'password': '',
-            'sender': '', 'signature': 'Sent by batchmail'}
+            'sender name': '', 'signature': 'Sent by batchmail'}
 mail = {'subject':"", 'content':'', 'file':[]}
 
 def sentmail(mail_server, user_info, mail, address_list):
     print(mail_server, user_info, mail, address_list)
-    msg = MIMEMultipart()
 
-    msg['From'] = user_info['sender']
-    msg['To'] = address_list[0]
+    msg = MIMEMultipart()
+    msg['From'] = userInfo['sender name']
+    # msg['To'] = address_list[0]
     msg['Subject'] = mail['subject']
-    msg.attach(MIMEText(mail['content'], 'html'))
+    msg.attach(MIMEText(mail['content'] + "<br><br>" + userInfo['signature'], 'html'))
 
     for each_file in mail['file']:
 
@@ -40,7 +40,17 @@ def sentmail(mail_server, user_info, mail, address_list):
     mailServer.starttls()
     mailServer.ehlo()
     mailServer.login(user_info['username'], user_info['password'])
-    mailServer.sendmail(user_info['username'], address_list[0], msg.as_string())
+    for idx, each_addr in enumerate(address_list):
+        log_file = open("batchmail.log", 'a')
+        try:
+            msg['To'] = each_addr
+            print(idx, " sent to ", each_addr, end="")
+            mailServer.sendmail(user_info['username'], each_addr, msg.as_string())
+            print(" is done!")
+        except:
+            log_file.write(idx.__str__() + each_addr + " is faild to sent\n")
+            print( " failed to sent!");
+            raise
     # Should be mailServer.quit(), but that crashes...
     mailServer.close()
 
@@ -49,8 +59,10 @@ def main():
     parser = OptionParser(usage='Usage: login ......')
     parser.add_option("-c", "--smtp-config", dest="smtp_config",
                       help="Smtp server and login infomation", action="store")
-    parser.add_option("-m", "--mail-content", dest="mail_content",
+    parser.add_option("-m", "--mail", dest="mail",
                       help="The mail content you wish to send", action="store")
+    parser.add_option("-s", "--mail-subject", dest="mail_subject",
+                      help="The mail subject you wish to send", action="store")
     parser.add_option("-l", "--mail-list", dest="mail_list",
                       help="The mail list you wish to send", action="store")
     parser.add_option("-g", "--generate-config", dest="gerenate_config",
@@ -79,8 +91,10 @@ def main():
     if not options.mail_list:
         parser.error("no mail list ")
     else:
-        with open(options.mail_list) as each_mail:
-            address_list.append(each_mail.read().strip())
+        mail_list = open(options.mail_list)
+        for each_mail in mail_list.readlines():
+            address_list.append(each_mail.strip())
+        mail_list.close()
     if not options.smtp_config:
         parser.error("Not server config")
     else:
@@ -100,10 +114,23 @@ def main():
             userInfo['sender name'] = config.get('User Info', 'sender name')
         if config.has_option('User Info', 'signature'):
             userInfo['signature'] = config.get('User Info', 'signature')
+    if not options.mail:
+        parser.error("No mail")
+    else:
+        config = configparser.RawConfigParser()
+        config.read(options.mail)
+
+        if config.has_option('Mail', 'subject'):
+            mail['subject'] = config.get('Mail', 'subject')
+        if config.has_option('Mail', 'content'):
+            mail['content'] = config.get('Mail', 'content')
+
     if options.file_list:
         mail['file'].extend(options.file_list)
-    if options.mail_content:
-        mail['content'] = options.mail_content
+    # if options.mail_content:
+    #     mail['content'] = open(options.mail_content).read()
+    # if options.mail_subject:
+    #     mail['subject'] = options.mail_subject
 
     sentmail(mailServer, userInfo, mail, address_list)
 
